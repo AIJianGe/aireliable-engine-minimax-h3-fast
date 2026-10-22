@@ -1,0 +1,197 @@
+# ============================================================
+# MiniMaxH3Fast 满血 FP16 视频生成引擎 manifest（v0.2 · S3 实装）
+# ------------------------------------------------------------
+# 定位：平台"视频生成"能力（MiniMax-H3 生态，满血 FP16 + LightX2V Turbo 蒸馏 LoRA）
+#   - paradigm: integrated（完全自定义模式，继承 CustomEngine）
+#   - capability: video_generation（网关 POST /v1/videos/generation 硬性校验）
+#   - task_type : video_generation（任务中心分类）
+#
+# S3 定档（见 ANALYSIS-TASKS/47-* 选型评测）：
+#   - 满血基座：MiniMaxAI/MiniMax-H3（官方 diffusers compound pipeline，FP16）
+#   - 蒸馏加速：LightX2V Turbo（lightx2v/Minimax-h3-Turbo，diffusers bf16 LoRA）
+#     8 步 v1.0：FL2VA=`minimax_h3_fl2v_turbo_8step_v1.0_768p_bf16.safetensors`，
+#     Ref2VA=`minimax_h3_ref2v_turbo_8step_v1.0_768p_bf16.safetensors`
+#   - 采样契约 8 步 + shift=12/6(video)/3(audio)，guidance≈1.0
+#
+# ⚠️ 平台导入校验要求：各 variant 的 model_file_ids 并集 == model_files[].id 集合
+#    本项目 1 档位 = fp16-base(基座) + turbo-lora(FL2VA 蒸馏) 两条资源。
+#
+# ⚠️ variant.name 必须与 model_scanner.py 的 _KNOWN_VARIANTS 逐字一致
+#    （variant 扫描匹配契约，双处不一致 → UI 扫不到 → 无法触发下载）。
+#
+# 环境：满血 FP16 → requires_torch: true（torch + diffusers）
+# 硬件：本机 GPU 为 Turing（SM 7.5，Quadro RTX 8000 / 48GB）：
+#      无 BF16 / FP8 / FlashAttention-2，S3 实装固定 FP16 + PyTorch SDPA。
+#      蒸馏加速只靠步数蒸馏 LoRA 旁路，不引任何特殊 CUDA kernel。
+# ⚠️ 基座 marker 的 key_files 为"best-effort diffusers 复合结构"，真实 HF 文件
+#    布局需一次实测核对（模型管理若某 key_file 404 会显式暴露，据此微调）。
+# ============================================================
+
+# ===== v0.1 必需字段 =====
+engine_id: minimax_h3_fast_a7c9d3e2
+engine_name: MiniMaxH3Fast
+engine_version: 0.2.0
+aireliable_compat: ">=0.0.16"
+uv_env_name: video-minimax-h3-fast
+export_mode: source
+
+# ===== v0.1 可选字段 =====
+description: "MiniMaxH3Fast 满血 FP16 视频生成引擎（MiniMax-H3 生态，满血 FP16 diffusers 管线 + LightX2V Turbo 8 步蒸馏 LoRA）。S3 已实装：load() 满血 FP16 + 蒸馏 LoRA 注入，infer() 8 步抽样。"
+
+# ===== v0.2 新增字段 =====
+engine_uid: aireliable://aijiange/video/minimax_h3_fast_a7c9d3e2
+paradigm: integrated
+sdk_version: ">=0.3.0"
+
+# 作者信息
+author:
+  name: AI剑歌
+
+# 第三方开源引用
+third_party_references:
+  - name: MiniMax-H3
+    author: MiniMaxAI
+    github: https://github.com/MiniMax-AI/MiniMax-H3
+    license: MiniMax H3 Community License
+    description: 满血 FP16 diffusers 复合管线基座（text_encoder / transformer / VAE / audio_vae）
+  - name: LightX2V Turbo
+    author: lightx2v
+    github: https://github.com/lightx2v/Minimax-h3-Turbo
+    license: Apache-2.0
+    description: FL2VA 8 步蒸馏加速 LoRA（minimax_h3_fl2v_turbo_8step_v1.0，ComfyUI 布局）
+
+# 能力由引擎 /capabilities 端点声明（server.py 实现 video_generation）
+
+# integrated 范式不依赖节点包
+node_packages: []
+
+# ============================================================
+# v0.2.5+ 引擎环境配置（env_config 块）
+# ============================================================
+env_config:
+  requires_torch: true          # 满血 FP16 → torch + diffusers
+  requires_python: '>=3.10,<3.13'
+  notes: 'MiniMaxH3Fast 使用满血 FP16 diffusers 管线（无需量化），运行需要 torch+CUDA 与 diffusers。本机为 Turing 老卡（SM 7.5）：无 BF16 / FP8 / FlashAttention-2，固定 FP16 + PyTorch SDPA；蒸馏加速靠 LightX2V Turbo 步数蒸馏 LoRA 旁路注入，无特殊 kernel。'
+
+# ============================================================
+# v0.2.1 新增：models 块（模型分类规范化）
+# ============================================================
+models:
+  # ===== 模型目录布局（与 config.py 的 _DEFAULT_MODEL_SUBDIR 保持一致）=====
+  model_layout:
+    base: video/minimax-h3-fast/
+
+  # ===== 默认 variant =====
+  default_variant: MiniMaxH3Fast/fp16-full-8step
+
+  # ===== 档位列表（1 个）=====
+  # ⚠️ name 必须与引擎 model_scanner.py 的 _KNOWN_VARIANTS 完全一致
+  # model_file_ids 并集 {mh3fast-fp16-base, mh3fast-turbo-lora-fl2v} == model_files 集合
+  variants:
+    - name: MiniMaxH3Fast/fp16-full-8step
+      alias: FP16 满血 8步（LightX2V Turbo 蒸馏）
+      base_model: MiniMax-H3 (FP16 full)
+      precision: fp16
+      loader: diffusers
+      vram_required: 20GB
+      path: video/minimax-h3-fast
+      model_file_ids:
+        - mh3fast-fp16-base
+        - mh3fast-turbo-lora-fl2v
+      uv_env: envs/video-minimax-h3-fast
+
+  # ===== 模型文件清单（2 条：满血基座 marker + 蒸馏 LoRA 单文件）=====
+  #
+  # ⚠️ 基座 marker 下载量极大（FP16 ~33B，数十 GB），kew_files 覆盖标准
+  #    diffusers compound pipeline 的必需组件文件；缺失时平台会将 variant 标为
+  #    incomplete_repo 并阻断启动（load() 只校验不下载）。
+  model_files:
+    # ----- 1. 满血 FP16 基座（MiniMax 官方 diffusers compound repo，marker 整仓下载）-----
+    - id: mh3fast-fp16-base
+      role: main
+      filename: model_index.json                # marker 标志文件
+      target_dir: video/minimax-h3-fast
+      format: marker
+      size_bytes: 0
+      key_files:
+        # ✔ 2026-09-25 实测对齐真实仓库（reference 引擎 models/video/minimax-h3/diffusers_format）：
+        #   无 token_refiner / feature_extractor / image_processor，实际为 tokenizer/ + processor/；
+        #   大模型为 safetensors 分片（含 config + index + 全部分片，缺一份即不完整）。
+        # 根：pipeline 索引（modular 双索引，ModularPipeline 依此加载）
+        - model_index.json
+        - modular_model_index.json
+        # text_encoder（Qwen3VL-32B，14 分片）
+        - text_encoder/config.json
+        - text_encoder/model.safetensors.index.json
+        - text_encoder/model-00001-of-00014.safetensors
+        - text_encoder/model-00002-of-00014.safetensors
+        - text_encoder/model-00003-of-00014.safetensors
+        - text_encoder/model-00004-of-00014.safetensors
+        - text_encoder/model-00005-of-00014.safetensors
+        - text_encoder/model-00006-of-00014.safetensors
+        - text_encoder/model-00007-of-00014.safetensors
+        - text_encoder/model-00008-of-00014.safetensors
+        - text_encoder/model-00009-of-00014.safetensors
+        - text_encoder/model-00010-of-00014.safetensors
+        - text_encoder/model-00011-of-00014.safetensors
+        - text_encoder/model-00012-of-00014.safetensors
+        - text_encoder/model-00013-of-00014.safetensors
+        - text_encoder/model-00014-of-00014.safetensors
+        # transformer（FL2VA，14 分片 fused_qkv 扩散权重）
+        - transformer/config.json
+        - transformer/diffusion_pytorch_model.safetensors.index.json
+        - transformer/diffusion_pytorch_model-00001-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00002-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00003-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00004-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00005-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00006-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00007-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00008-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00009-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00010-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00011-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00012-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00013-of-00014.safetensors
+        - transformer/diffusion_pytorch_model-00014-of-00014.safetensors
+        # VAE（3 分片）+ 音频 VAE
+        - vae/config.json
+        - vae/diffusion_pytorch_model.safetensors.index.json
+        - vae/diffusion_pytorch_model-00001-of-00003.safetensors
+        - vae/diffusion_pytorch_model-00002-of-00003.safetensors
+        - vae/diffusion_pytorch_model-00003-of-00003.safetensors
+        - audio_vae/config.json
+        - audio_vae/diffusion_pytorch_model.safetensors
+        # 调度器 / 音频调度器
+        - scheduler/scheduler_config.json
+        - audio_scheduler/scheduler_config.json
+        # 分词器 / 处理器
+        - tokenizer/tokenizer_config.json
+        - processor/preprocessor_config.json
+      required_for:
+        - MiniMaxH3Fast/fp16-full-8step
+      source:
+        type: huggingface
+        repo_id: MiniMaxAI/MiniMax-H3
+        url: https://huggingface.co/MiniMaxAI/MiniMax-H3
+        mirror_url: https://hf-mirror.com/MiniMaxAI/MiniMax-H3
+      description: "满血 FP16 diffusers 管线基座（MiniMax-H3，Apache-2.0）。S3 实装 load() 用 ModularPipeline + load_components(names=[...], dtype=fp16)。✔ 2026-09-25 key_files 已按真实仓库实测对齐。"
+
+    # ----- 2. LightX2V Turbo 蒸馏 LoRA（FL2VA 8 步，ComfyUI 布局 bf16 单文件）-----
+    # ✔ 2026-09-25 复用决策：直接引用本机已下载的 reference 引擎 ComfyUI LoRA
+    #   （models/video/minimax-h3/loras/），lora_loader 负责 ComfyUI→diffusers key 映射。
+    - id: mh3fast-turbo-lora-fl2v
+      role: lora
+      filename: minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors
+      target_dir: video/minimax-h3/loras
+      format: safetensors
+      source:
+        type: huggingface
+        repo_id: lightx2v/Minimax-h3-Turbo
+        url: https://huggingface.co/lightx2v/Minimax-h3-Turbo/resolve/main/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors
+        mirror_url: https://hf-mirror.com/lightx2v/Minimax-h3-Turbo/resolve/main/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors
+      description: "LightX2V Turbo 蒸馏加速 LoRA（FL2VA 8 步 v1.0，ComfyUI 布局 bf16，Apache-2.0）。复用 reference 引擎已下载文件；S3 实装 load() 时 lora_loader 按 ComfyUI→diffusers 映射以旁路 adapter 注入满血 transformer。"
+
+  # ===== LoRA 扫描配置（复用 reference 已下载目录）=====
+  loras:
+    scan_dir: video/minimax-h3/loras/

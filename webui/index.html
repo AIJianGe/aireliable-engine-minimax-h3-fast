@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiniMaxH3Fast · 满血 FP16 视频生成</title>
+<style>
+  :root {
+    --bg: #0f1115; --panel: #1a1d24; --line: #2a2f3a;
+    --txt: #e8eaf0; --mut: #8a90a0; --accent: #5b8cff; --gold: #f7c948;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, sans-serif; background: var(--bg); color: var(--txt); }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 22px;
+           border-bottom: 1px solid var(--line); background: var(--panel);
+           position: sticky; top: 0; z-index: 5; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: #6c7180; flex: 0 0 auto; }
+  .dot.ready { background: #2ecc71; }
+  .dot.error { background: #e74c3c; }
+  .dot.busy { background: #f1c40f; animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+  h1 { font-size: 17px; margin: 0; }
+  .tag { color: var(--mut); font-size: 13px; }
+  header .meta { margin-left: auto; color: var(--mut); font-size: 12px; }
+  #state-text { color: var(--mut); font-size: 13px; min-width: 96px; }
+
+  main { max-width: 860px; margin: 24px auto; padding: 0 20px 60px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+  .card h2 { font-size: 15px; margin: 0 0 12px; color: var(--accent); }
+
+  label { display: block; font-size: 13px; color: var(--mut); margin: 12px 0 6px; }
+  input[type=text], input[type=number], textarea, select {
+    width: 100%; background: #232833; color: var(--txt);
+    border: 1px solid var(--line); border-radius: 8px; padding: 9px 11px; font-size: 14px;
+  }
+  textarea { resize: vertical; min-height: 72px; }
+  .row { display: flex; gap: 14px; flex-wrap: wrap; }
+  .row>div { flex: 1 1 150px; }
+  .btns { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  button {
+    border: 1px solid var(--line); background: #232833; color: var(--txt);
+    border-radius: 8px; padding: 9px 16px; font-size: 14px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:disabled { opacity: .5; cursor: not-allowed; }
+  button.danger:hover { border-color: #e74c3c; }
+
+  .prog { height: 8px; background: #232833; border-radius: 6px; overflow: hidden; margin: 10px 0; }
+  .prog>div { height: 100%; width: 0%; background: var(--accent); transition: width .4s; }
+  #log { font-family: ui-monospace, Consolas, monospace; font-size: 12px;
+         max-height: 180px; overflow: auto; background: #13161c; border: 1px solid var(--line);
+         border-radius: 8px; padding: 10px; line-height: 1.7; white-space: pre-wrap; }
+  #log .ok { color: #2ecc71; } #log .err { color: #e74c3c; } #log .info { color: var(--mut); }
+  video { width: 100%; border-radius: 10px; margin-top: 12px; background: #000; display: none; }
+  .hint { color: var(--mut); font-size: 12px; margin-top: 6px; }
+  .gold { color: var(--gold); }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="dot" id="state-dot" title="引擎状态"></span>
+  <h1>MiniMaxH3Fast</h1>
+  <span class="tag">满血 FP16 · LightX2V Turbo 蒸馏 8 步</span>
+  <span class="meta" id="engine-meta">读取引擎信息…</span>
+  <span id="state-text"></span>
+</header>
+
+<main>
+  <!-- 模型控制 -->
+  <div class="card">
+    <h2>引擎</h2>
+    <div class="btns">
+      <button id="btn-status">刷新状态</button>
+      <button id="btn-load">加载模型</button>
+      <button id="btn-unload" class="danger">卸载模型</button>
+    </div>
+    <div id="status-line" class="hint">—</div>
+  </div>
+
+  <!-- 生成表单 -->
+  <div class="card">
+    <h2>生成视频 <span class="gold">(蒸馏 8 步即可清晰)</span></h2>
+
+    <label for="prompt">正向提示词（Prompt）</label>
+    <textarea id="prompt" placeholder="例如：一只橘猫在窗台上打盹，暖阳洒落，镜头缓慢推进"></textarea>
+
+    <label for="nprompt">负向提示词（Negative Prompt，可空）</label>
+    <input type="text" id="nprompt" placeholder="不希望出现的内容，蒸馏版一般忽略">
+
+    <div class="row">
+      <div><label for="res">分辨率</label>
+        <select id="res">
+          <option value="1280x720">1280×720</option>
+          <option value="1024x576">1024×576</option>
+          <option value="720x1280">720×1280</option>
+          <option value="864x480">864×480（更快）</option>
+        </select>
+      </div>
+      <div><label for="frames">帧数（17n+5）</label>
+        <input type="number" id="frames" value="121" min="22" step="17">
+        <div class="hint">建议 121（约 5 秒）/ 205 / 289…</div>
+      </div>
+      <div><label for="steps" title="LightX2V Turbo 蒸馏步数">推理步数</label>
+        <input type="number" id="steps" value="8" min="4" max="30">
+        <div class="hint">8=清晰基线；4=仅连通链路（必糊）</div>
+      </div>
+      <div><label for="seed">随机种子</label>
+        <input type="number" id="seed" value="-1">
+        <div class="hint">-1 = 随机</div>
+      </div>
+    </div>
+
+    <div class="btns">
+      <button id="btn-gen" class="primary">生成视频</button>
+    </div>
+  </div>
+
+  <!-- 输出 -->
+  <div class="card">
+    <h2>输出</h2>
+    <div class="prog"><div id="prog-bar"></div></div>
+    <video id="video" controls></video>
+    <div id="log"></div>
+  </div>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

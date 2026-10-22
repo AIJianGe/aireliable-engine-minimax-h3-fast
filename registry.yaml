@@ -1,0 +1,51 @@
+# ============================================================
+# MiniMaxH3Fast 视频生成引擎注册片段（引擎内副本）
+# ------------------------------------------------------------
+# 用途：
+#   - 导入 .airengine 包时由 EngineImporter 拷贝到
+#     config/engines/<engine_id>.yaml
+#   - 此文件是导入/卸载流程的核心数据来源
+#
+# 必须遵守的约束：
+#   1. 文件名必须为 <engine_id>.yaml（与文件内 engine_id 字段一致）
+#   2. deployment.local_config.uv_env 必须指向 envs/<env_name>
+#   3. variant 内的 uv_env 必须与 deployment.local_config.uv_env 一致
+#   4. ⚠️ 不得声明 code_path（见下方注释）
+# ============================================================
+
+# ===== 必需字段 =====
+engine_id: minimax_h3_fast_a7c9d3e2        # 必须与文件名一致，小写下划线
+engine_name: MiniMaxH3Fast                 # UI 显示名
+capability: video_generation               # 能力类别（网关硬性要求）
+capabilities:                              # v0.4.8+ 多值能力列表
+    - video_generation
+type: video                                # 引擎类型
+
+# ===== 部署模式 =====
+deployment:
+    mode: local                            # local | remote
+    local_config:
+        port: 7014                         # 引擎监听端口
+        uv_env: envs/video-minimax-h3-fast # uv 环境路径（卸载时定位 envs/ 目录）
+        # ⚠️ 不得声明 code_path（v1.1 修复）：
+        #   EngineManager 一旦读到 code_path 就会把子进程 cwd 设为该目录
+        #   （engine_manager.py:617-633），而 startup_cmd 用的是
+        #   `python -m engines.<engine_id>.server` 模块形式——该形式要求
+        #   cwd = 项目根（`engines` 才是可导入包）。声明 code_path 会导致
+        #   ModuleNotFoundError: No module named 'engines'，引擎完全无法启动。
+        #   不声明时 cwd = project_root，与全部既有引擎（含 VSR）一致。
+        startup_cmd: "python -m engines.minimax_h3_fast_a7c9d3e2.server --port 7014"
+        # 引擎进程环境变量（可选）
+        # EngineImporter 会自动同步 manifest.models.model_layout.base 到
+        # AIRELIABLE_MODEL_LAYOUT_BASE 环境变量（双源真相消除）
+        env: {}
+    remote_config:                          # v0.3 启用远程引擎
+        url: ""
+        auth_token: ""
+
+# ===== 默认驻留级别 =====
+# hot  : 进程在 + 模型在显存
+# warm : 进程在 + 模型未加载
+# cold : 进程未启动（按需启动，大模型/重资源引擎推荐）
+# 本引擎是满血 FP16 大模型（+20GB 显存），显存常驻收益低 → 选 cold，按需启动。
+default_residency: cold

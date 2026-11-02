@@ -30,7 +30,7 @@
 # ===== v0.1 必需字段 =====
 engine_id: minimax_h3_fast_a7c9d3e2
 engine_name: MiniMaxH3Fast
-engine_version: 0.2.0
+engine_version: 1.0.0
 aireliable_compat: ">=0.0.16"
 uv_env_name: video-minimax-h3-fast
 export_mode: source
@@ -61,6 +61,11 @@ third_party_references:
     description: FL2VA 8 步蒸馏加速 LoRA（minimax_h3_fl2v_turbo_8step_v1.0，ComfyUI 布局）
 
 # 能力由引擎 /capabilities 端点声明（server.py 实现 video_generation）
+
+# 升级信息（2026-11-02 补齐 upgrade 块：检查自家引擎仓库 tag）
+upgrade:
+  check_url: https://api.github.com/repos/AIJianGe/aireliable-engine-minimax-h3-fast/releases/latest
+  auto_check: true
 
 # integrated 范式不依赖节点包
 node_packages: []
@@ -181,6 +186,7 @@ models:
     # ✔ 2026-09-25 复用决策：直接引用本机已下载的 reference 引擎 ComfyUI LoRA
     #   （models/video/minimax-h3/loras/），lora_loader 负责 ComfyUI→diffusers key 映射。
     - id: mh3fast-turbo-lora-fl2v
+      size_bytes: 1956193000
       role: lora
       filename: minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors
       target_dir: video/minimax-h3/loras

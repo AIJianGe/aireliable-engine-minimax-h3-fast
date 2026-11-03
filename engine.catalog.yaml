@@ -1,0 +1,44 @@
+# 开源引擎中心展示元数据（任务 80 / T4.1）
+schema: 1
+engine_id: minimax_h3_fast_a7c9d3e2
+
+name:
+  zh: "MiniMax H3 极速版"
+  en: "MiniMaxH3Fast"
+
+description:
+  zh: "MiniMax H3 满血 FP16 加速版：FP16 原版模型 + 8 步蒸馏 LoRA，兼顾画质与速度。"
+  en: "Accelerated MiniMax H3 engine: full FP16 pipeline with an 8-step distilled LoRA for fast, high-quality video generation."
+
+category: video
+tags:
+  - video
+  - distilled
+  - fp16
+
+repository:
+  github: AIJianGe/aireliable-engine-minimax-h3-fast
+  gitee: AIJianGe/aireliable-engine-minimax-h3-fast
+
+cover: catalog/covers/minimax_h3_fast_a7c9d3e2.webp
+
+requirements:
+  python: ">=3.10,<3.13"
+  torch: ">=2.5.0"
+  gpu: required
+
+license: PolyForm-Noncommercial-1.0.0
+
+description_long:
+  zh: |-
+    MiniMax H3 极速版在满血 FP16 原版模型上叠加 8 步蒸馏 LoRA，用明显更少的采样步数换取出片速度，画质尽量贴近原版。
+
+    适合预览、批量草稿、分镜试拍与需要快速迭代的场景；需要最终交付画质时，建议仍切换到标准版生成。
+
+    运行依赖 NVIDIA GPU 与 torch >= 2.5.0，显存需求与标准版接近；蒸馏只减少采样步数，不降低模型本身的权重精度。
+  en: |-
+    MiniMax H3 Fast stacks an 8-step distilled LoRA on the full FP16 base model, cutting sampling steps for much faster output while staying close to the original in quality.
+
+    It fits previews, batch drafts, storyboard tests and fast iteration; for final delivery quality, switch back to the standard engine.
+
+    An NVIDIA GPU and torch >= 2.5.0 are required, and VRAM usage is close to the standard version. Distillation only reduces sampling steps, not the weight precision itself.

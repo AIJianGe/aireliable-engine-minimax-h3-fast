@@ -29,6 +29,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
+# 任务 71：设备探测统一走 SDK（平台与引擎同一份事实源）
+from aireliable_engine import EngineConfig as BaseEngineConfig
+from aireliable_engine.device import resolve_device as _sdk_resolve_device
+
 # ===== 常量 =====
 
 ENGINE_ID = "minimax_h3_fast_a7c9d3e2"
@@ -88,30 +92,19 @@ DEFAULT_MODEL_SUBDIR = MODEL_SUBDIR
 
 
 @dataclass
-class EngineConfig:
+class EngineConfig(BaseEngineConfig):
     """MiniMaxH3Fast 引擎运行配置。"""
 
-    # ===== 基础 =====
+    # ===== 基础（身份 / 端口默认值由本引擎覆盖，其余公共字段见基类）=====
     engine_id: str = ENGINE_ID
     engine_name: str = ENGINE_NAME
     capability: str = CAPABILITY
     engine_type: str = ENGINE_TYPE
     port: int = DEFAULT_PORT
-    host: str = "127.0.0.1"
-
-    # ===== 路径 =====
-    models_root: Path = Path("models")
-    data_root: Path = Path("data")
-    project_root: Path = Path(".")
-    output_root: Path = Path("output")
 
     # ===== 推导路径 =====
     model_dir: Path = field(init=False)
     log_dir: Path = field(init=False)
-
-    # ===== 设备 =====
-    # auto: 有 CUDA 则 cuda:0，否则 cpu（视频生成走 torch+diffusers，必须有具体设备）
-    device: str = "auto"
 
     # ===== 生成参数默认值（S3 实装：对齐官方 turbo 8 步采样契约）=====
     width: int = 1280
@@ -164,21 +157,16 @@ class EngineConfig:
 
         说明：满血 FP16 diffusers pipeline 调度到 GPU 才算真正"满血"；
         CPU 仅作兜底（评测/无卡场景）。
+
+        任务 71：``auto`` 分支委托 SDK ``device.resolve_device``（以进程内
+        torch 为准），显式值保持原样。
         """
         device = (self.device or "auto").strip()
         if device == "cpu":
             return "cpu"
         if device.startswith(("cuda", "gpu")):
             return device
-        # auto
-        try:
-            import torch  # type: ignore
-
-            if torch.cuda.is_available():
-                return "cuda:0"
-        except Exception:
-            pass
-        return "cpu"
+        return _sdk_resolve_device("auto", cuda_index=0)
 
     # ===== 蒸馏采样契约辅助 =====
 
